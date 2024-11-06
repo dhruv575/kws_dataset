@@ -4,9 +4,14 @@ import JSZip from 'jszip';
 
 const Container = styled.div`
   width: 100%;
-  max-width: 500px;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   margin: 0 auto;
   padding: 1rem;
+  background-image: url('/logo512.png');
+  background-repeat: repeat;
 `;
 
 const Card = styled.div`
@@ -14,6 +19,7 @@ const Card = styled.div`
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   padding: 1.5rem;
+  max-width: 500px;
 `;
 
 const Title = styled.h1`
