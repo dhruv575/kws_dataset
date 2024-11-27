@@ -122,9 +122,10 @@ async function generateStep1Recordings(recordings, backgroundEffects) {
         const newBlob = await overlayBackgroundEffect(recording.blob, effect);
         const newRecording = {
           keyword: recording.keyword,
+          class: recording.class, // Propagate class
           take: `${recording.take}_bg`,
           blob: newBlob,
-        };
+        };        
         step1Recordings.push(newRecording);
       } catch (error) {
         console.error('generateStep1Recordings: Error processing recording:', error);
@@ -146,9 +147,10 @@ async function generateStep2Recordings(recordings) {
       const newBlob = await distortPitchAndSpeed(recording.blob);
       const newRecording = {
         keyword: recording.keyword,
-        take: `${recording.take}_distort`,
+        class: recording.class, // Propagate class
+        take: `${recording.take}_bg`,
         blob: newBlob,
-      };
+      };      
       step2Recordings.push(newRecording);
     } catch (error) {
       console.error('generateStep2Recordings: Error processing recording:', error);
@@ -175,9 +177,10 @@ async function generateStep3Recordings(recordings, backgroundEffects) {
         const newBlob = await distortPitchAndSpeed(overlayedBlob);
         const newRecording = {
           keyword: recording.keyword,
-          take: `${recording.take}_bg_distort`,
+          class: recording.class, // Propagate class
+          take: `${recording.take}_bg`,
           blob: newBlob,
-        };
+        };        
         step3Recordings.push(newRecording);
       } catch (error) {
         console.error('generateStep3Recordings: Error processing recording:', error);

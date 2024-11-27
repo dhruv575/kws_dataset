@@ -10,9 +10,23 @@ export async function overlayBackgroundEffect(recordingBlob, effectAudioBuffer) 
     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
     const recordingAudioBuffer = await audioContext.decodeAudioData(recordingArrayBuffer);
 
-    const maxDuration = Math.max(recordingAudioBuffer.duration, effectAudioBuffer.duration);
+    // Calculate the max duration as the recording duration
+    const recordingDuration = recordingAudioBuffer.duration;
     const sampleRate = audioContext.sampleRate;
-    const length = Math.ceil(maxDuration * sampleRate);
+    const length = Math.ceil(recordingDuration * sampleRate);
+
+    // Truncate the effectAudioBuffer to match the recording's duration
+    const truncatedEffectAudioBuffer = audioContext.createBuffer(
+      effectAudioBuffer.numberOfChannels,
+      length,
+      sampleRate
+    );
+
+    for (let channel = 0; channel < effectAudioBuffer.numberOfChannels; channel++) {
+      const originalChannelData = effectAudioBuffer.getChannelData(channel);
+      const truncatedChannelData = truncatedEffectAudioBuffer.getChannelData(channel);
+      truncatedChannelData.set(originalChannelData.subarray(0, length));
+    }
 
     const offlineContext = new OfflineAudioContext(
       recordingAudioBuffer.numberOfChannels,
@@ -33,7 +47,7 @@ export async function overlayBackgroundEffect(recordingBlob, effectAudioBuffer) 
 
     // Create buffer source for effect
     const effectSource = offlineContext.createBufferSource();
-    effectSource.buffer = effectAudioBuffer;
+    effectSource.buffer = truncatedEffectAudioBuffer;
 
     // Create gain node for effect
     const effectGainNode = offlineContext.createGain();

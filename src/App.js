@@ -98,12 +98,6 @@ const Progress = styled.div`
   margin-bottom: 1rem;
 `;
 
-const RecordingCount = styled.div`
-  color: #666;
-  font-size: 0.9rem;
-  margin-top: 1rem;
-`;
-
 // Helper functions to convert audio data to WAV format
 async function convertToWav(blob) {
   const arrayBuffer = await blob.arrayBuffer();
@@ -202,18 +196,24 @@ function writeString(view, offset, string) {
   }
 }
 
+const predefinedWords = [
+  "Hello", "Thank", "Good", "Bad", "Happy", "Sad", "Okay", "Sure",
+  "No", "Yes", "Please", "Sorry", "Great", "Awful", "Love", "Hate",
+  "Nice", "Angry", "Welcome", "Maybe"
+];
+
+const predefinedClasses = ["Positive", "Negative", "Neutral"];
+const recordingsPerClass = 20;
 
 const KeywordRecorder = () => {
-  const [words, setWords] = useState('');
-  const [amount, setAmount] = useState('');
   const [submitted, setSubmitted] = useState(false);
-  const [keywords, setKeywords] = useState([]);
-  const [currentKeywordIndex, setCurrentKeywordIndex] = useState(0);
+  const [currentClassIndex, setCurrentClassIndex] = useState(0);
+  const [recordingCount, setRecordingCount] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [recordings, setRecordings] = useState([]);
   const [isComplete, setIsComplete] = useState(false);
   const [stream, setStream] = useState(null);
-  const [keywordRecordingsCount, setKeywordRecordingsCount] = useState([]);
+  const [name, setName] = useState('');
   const [isGeneratingDuplicates, setIsGeneratingDuplicates] = useState(false);
   const mediaRecorderRef = useRef(null);
 
@@ -225,13 +225,16 @@ const KeywordRecorder = () => {
   };
 
   const handleSubmit = () => {
-    const keywordsArray = words.split(',').map((word) => word.trim()).filter(Boolean);
-    setKeywords(keywordsArray);
+    if (!name.trim()) {
+      alert("Please enter your name.");
+      return;
+    }
+
     setSubmitted(true);
     setIsComplete(false);
     setRecordings([]);
-    setKeywordRecordingsCount(Array(keywordsArray.length).fill(0));
-    setCurrentKeywordIndex(0);
+    setCurrentClassIndex(0);
+    setRecordingCount(0);
     stopStream();
 
     navigator.mediaDevices.getUserMedia({ audio: true })
@@ -247,187 +250,147 @@ const KeywordRecorder = () => {
 
   const toggleRecording = () => {
     if (!stream) return;
-  
-    const desiredAmount = parseInt(amount);
-  
-    if (!isRecording && keywordRecordingsCount[currentKeywordIndex] < desiredAmount) {
-      // Start recording without specifying a mimeType
+
+    if (!isRecording) {
       mediaRecorderRef.current = new MediaRecorder(stream);
-  
       const audioChunks = [];
-  
+
       mediaRecorderRef.current.ondataavailable = (e) => {
         if (e.data.size > 0) {
           audioChunks.push(e.data);
         }
       };
-  
+
       mediaRecorderRef.current.onstop = async () => {
-        // Combine chunks into a single Blob
         const audioBlob = new Blob(audioChunks);
-  
-        // Convert to WAV format
         const wavBlob = await convertToWav(audioBlob);
-  
-        const currentKeyword = keywords[currentKeywordIndex];
-        const updatedCount = keywordRecordingsCount[currentKeywordIndex] + 1;
-  
-        // Add the new recording to the state
+
+        const currentClass = predefinedClasses[currentClassIndex];
+        const currentWord = predefinedWords[recordingCount % predefinedWords.length];
+
         setRecordings((prev) => [
           ...prev,
-          {
-            keyword: currentKeyword,
-            take: updatedCount,
-            blob: wavBlob,
-          },
+          { class: currentClass, word: currentWord, blob: wavBlob, keyword: currentClass, take: recordingCount + 1 },
         ]);
-  
-        // Update the count for the current keyword
-        setKeywordRecordingsCount((prevCounts) => {
-          const updatedCounts = [...prevCounts];
-          updatedCounts[currentKeywordIndex] = updatedCount;
-          return updatedCounts;
-        });
-  
-        // Check if we've reached the desired amount for the current keyword
-        if (updatedCount >= desiredAmount) {
-          if (currentKeywordIndex >= keywords.length - 1) {
-            // All keywords recorded
-            setIsComplete(true);
-            setSubmitted(false);
-            stopStream();
-          } else {
-            // Move to the next keyword
-            setCurrentKeywordIndex((prevIndex) => prevIndex + 1);
-          }
+
+        const nextRecordingCount = recordingCount + 1;
+        if (nextRecordingCount < recordingsPerClass) {
+          setRecordingCount(nextRecordingCount);
+        } else if (currentClassIndex < predefinedClasses.length - 1) {
+          setCurrentClassIndex((prev) => prev + 1);
+          setRecordingCount(0);
+        } else {
+          setIsComplete(true);
+          setSubmitted(false);
+          stopStream();
         }
-  
+
         setIsRecording(false);
       };
-  
+
       mediaRecorderRef.current.start();
       setIsRecording(true);
-    } else if (isRecording) {
+    } else {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
     }
-  };    
+  };
 
   const handleDownload = async () => {
     setIsGeneratingDuplicates(true);
-  
+
     try {
       const allRecordings = [...recordings];
-  
+    
       // Generate duplicates
       const duplicates = await generateDuplicates(recordings);
-  
-      allRecordings.push(...duplicates);
-  
-      // Group recordings by keyword
-      const recordingsByKeyword = {};
-      allRecordings.forEach((recording) => {
-        const { keyword } = recording;
-        if (!recordingsByKeyword[keyword]) {
-          recordingsByKeyword[keyword] = [];
+    
+      console.log("Original Recordings:", recordings);
+      console.log("Duplicates:", duplicates);
+    
+      // Ensure duplicates have valid class properties
+      duplicates.forEach((duplicate) => {
+        if (!duplicate.class) {
+          duplicate.class = predefinedClasses.find((cls) => cls === duplicate.keyword) || "Unknown";
         }
-        recordingsByKeyword[keyword].push(recording);
       });
-  
+    
+      allRecordings.push(...duplicates);
+    
+      console.log("All Recordings:", allRecordings);
+    
       const zip = new JSZip();
-  
-      // For each keyword, sort recordings and assign sequential numbers
-      Object.keys(recordingsByKeyword).forEach((keyword) => {
-        const keywordRecordings = recordingsByKeyword[keyword];
-  
-        // Sort recordings based on original take number
-        keywordRecordings.sort((a, b) => {
-          const extractNumber = (take) => {
-            const match = take.toString().match(/^(\d+)/);
-            return match ? parseInt(match[1], 10) : 0;
-          };
-  
-          const aNum = extractNumber(a.take);
-          const bNum = extractNumber(b.take);
-  
-          return aNum - bNum;
-        });
-  
-        // Assign sequential numbers and add files to the ZIP
-        keywordRecordings.forEach((recording, index) => {
-          const fileNumber = index + 1; // Start numbering from 1
-          const fileName = `${keyword}_${fileNumber}.wav`;
-          zip.file(fileName, recording.blob);
+    
+      // Group recordings by class
+      predefinedClasses.forEach((className, classIndex) => {
+        const classRecordings = allRecordings.filter(
+          (rec) => rec.class === className || !rec.class
+        );
+    
+        classRecordings.forEach((recording, index) => {
+          const fileNumber = index + 1;
+          zip.file(`${classIndex + 1}_${fileNumber}.wav`, recording.blob);
         });
       });
-  
+    
       const content = await zip.generateAsync({ type: 'blob' });
       const url = window.URL.createObjectURL(content);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'keyword_recordings.zip';
+      a.download = `${name}_collected_data.zip`;
       a.click();
       window.URL.revokeObjectURL(url);
-  
+    
       setIsGeneratingDuplicates(false);
     } catch (error) {
-      console.error('handleDownload: Error generating duplicates:', error);
-      alert('An error occurred while generating duplicates. Please check the console for details.');
+      console.error("Error generating duplicates:", error);
+      alert("An error occurred while generating duplicates. Please check the console for details.");
       setIsGeneratingDuplicates(false);
-    }
+    }    
   };
-  
 
-  const currentKeyword = keywords[currentKeywordIndex];
-  const recordingsForKeyword = keywordRecordingsCount[currentKeywordIndex];
-
-  const progress = submitted
-    ? `Recording ${recordingsForKeyword + 1} of ${amount} for "${currentKeyword}"`
-    : '';
+  const currentClass = predefinedClasses[currentClassIndex];
+  const currentWord = predefinedWords[recordingCount % predefinedWords.length];
+  const progress = `Recording ${recordingCount + 1} of ${recordingsPerClass} for "${currentClass}" class`;
 
   return (
     <Container>
       <Card>
-        <Title>Keyword Dataset Recorder</Title>
+        <Title>Spoken Words Dataset Recorder</Title>
         <p>
-          After you record X amount of takes, the tool will automatically generate more duplicates. For each keyword, there will be 20 more samples created with background effects, the same amount of samples as recorded with distortions applied, and then another 20 samples with background effects and distorions. The output will be a zip folder of .wav files.
+          Thanks so much for helping with our project! We are working on building tiny machine learning powered wearables to help occupational therapists train students with autism better understand conversational cues.
+        </p>
+        <p>
+          We are collecting speech data of people saying the same 20 words with Positive, Negative, and Neutral tones. We ask that when you run the <strong>Positive</strong> recordings, you speak with a smile on your face. For the <strong>Negative</strong> recordings, speak with a slight frown (or introduce negativity/anger however else you'd like). For <strong>Neutral</strong> recordings, we ask that you try and inject as little emotion into your speech as possible.
+        </p>
+        <p>
+          This whole process shouldn't take more than 2 minutes. Please try and speak loudly! When you're done, please extract your folder and upload the folder to <a href="https://drive.google.com/drive/folders/1URP6nvmFNe-MytEl13n69sXRAaG-rKtR?usp=sharing" target="_blank" rel="noopener noreferrer">this Google Drive link</a> or email to dhruvgup@seas.upenn.edu.
         </p>
         {!submitted ? (
           <>
             <InputGroup>
-              <Label>Keywords (comma-separated)</Label>
+              <Label>Your Name</Label>
               <Input
                 type="text"
-                placeholder="yes, no, maybe"
-                value={words}
-                onChange={(e) => setWords(e.target.value)}
+                placeholder="Enter your name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
               />
             </InputGroup>
 
-            <InputGroup>
-              <Label>Recordings per keyword</Label>
-              <Input
-                type="number"
-                min="1"
-                placeholder="3"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-              />
-            </InputGroup>
-
-            <Button onClick={handleSubmit} disabled={!words || !amount}>
+            <Button onClick={handleSubmit} disabled={!name.trim()}>
               Start Recording Session
             </Button>
 
             {isComplete && (
-                <Button
+              <Button
                 download
                 onClick={handleDownload}
                 disabled={isGeneratingDuplicates}
                 style={{ marginTop: '1rem' }}
               >
                 {isGeneratingDuplicates
-                  ? 'Generating Duplicates...'
+                  ? "Generating Duplicates..."
                   : `Download Recordings`}
               </Button>
             )}
@@ -435,17 +398,12 @@ const KeywordRecorder = () => {
         ) : (
           <>
             <RecordingInfo>
-              <CurrentWord>"{currentKeyword}"</CurrentWord>
+              <CurrentWord>"{currentWord}"</CurrentWord>
               <Progress>{progress}</Progress>
             </RecordingInfo>
-
             <Button large recording={isRecording} onClick={toggleRecording}>
               {isRecording ? "Stop Recording" : "Start Recording"}
             </Button>
-
-            <RecordingCount>
-              {recordings.length} recording{recordings.length !== 1 ? 's' : ''} saved
-            </RecordingCount>
           </>
         )}
       </Card>

@@ -54,10 +54,10 @@ function chooseRandomPlaybackRate() {
   let playbackRate;
   if (Math.random() < 0.5) {
     // Speed up
-    playbackRate = 1.1 + Math.random() * 0.2; // between 1.1 and 1.3
+    playbackRate = 1 + Math.random() * 0.15; // between 1.1 and 1.3
   } else {
     // Slow down
-    playbackRate = 0.7 + Math.random() * 0.2; // between 0.7 and 0.9
+    playbackRate = 0.85 + Math.random() * 0.15; // between 0.7 and 0.9
   }
   console.log(`chooseRandomPlaybackRate: Selected playbackRate ${playbackRate.toFixed(2)}`);
   return playbackRate;
